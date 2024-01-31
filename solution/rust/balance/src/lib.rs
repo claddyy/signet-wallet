@@ -18,7 +18,7 @@ struct ExKey {
     finger_print: [u8; 4],
     child_number: [u8; 4],
     chaincode: [u8; 32],
-    key: [u8; 32],
+    key: [u8; 33],
 }
 
 // final wallet state struct
@@ -52,7 +52,30 @@ fn base58_decode(base58_string: &str) -> Vec<u8> {
 // 32 bytes: the chain code
 // 33 bytes: the public key or private key data (serP(K) for public keys, 0x00 || ser256(k) for private keys)
 fn deserialize_key(bytes: &[u8]) -> ExKey {
-    unimplemented!("implement the logic")
+    // Check if the input bytes are at least 78 bytes long (the minimum required length for a BIP32 key)
+    if bytes.len() < 78 {
+        panic!("Invalid input: insufficient bytes for BIP32 key");
+    }
+
+    let version = u32::from_be_bytes(bytes[0..4].try_into().unwrap());
+    let depth = [bytes[4]];
+    let finger_print = u32::from_be_bytes(bytes[5..9].try_into().unwrap());
+    let child_number = u32::from_be_bytes(bytes[9..13].try_into().unwrap());
+
+    let mut chaincode = [0u8; 32];
+    chaincode.copy_from_slice(&bytes[13..45]);
+
+    let mut key = [0u8; 33];
+    key.copy_from_slice(&bytes[45..78]);
+
+    ExKey {
+        version: version.to_be_bytes(),
+        depth,
+        finger_print: finger_print.to_be_bytes(),
+        child_number: child_number.to_be_bytes(),
+        chaincode,
+        key,
+    }
 }
 
 // Derive the secp256k1 compressed public key from a given private key
