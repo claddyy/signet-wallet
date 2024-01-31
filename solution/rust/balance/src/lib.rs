@@ -1,9 +1,10 @@
 #![allow(unused)]
-use std::{path::PathBuf, process::Command};
 
+use std::process::Command;
+use bs58;
 // Provided by administrator
-pub const WALLET_NAME: &str = "wallet_000";
-pub const EXTENDED_PRIVATE_KEY: &str = "tprv8ZgxMBicQKsPfCxvMSGLjZegGFnZn9VZfVdsnEbuzTGdS9aZjvaYpyh7NsxsrAc8LsRQZ2EYaCfkvwNpas8cKUBbptDzadY7c3hUi8i33XJ";
+pub const WALLET_NAME: &str = "wallet_152";
+pub const EXTENDED_PRIVATE_KEY: &str = "tprv8ZgxMBicQKsPdisufuN1WwxfQGPpBAm9DD11kyTANuq8LDBh6nGFj1kaddVP5U9if6LypPkdnUkuxLMUFkEyMNDSreXx12hxJC6WsboYbbs";
 
 #[derive(Debug)]
 pub enum BalanceError {
@@ -37,15 +38,9 @@ impl WalletState {
 
 // Decode a base58 string into an array of bytes
 fn base58_decode(base58_string: &str) -> Vec<u8> {
-    let base58_alphabet = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
-    // Convert Base58 string to a big integer
-
-    // Convert the integer to bytes
-
-    // Chop off the 32 checksum bits and return
-
-    // BONUS POINTS: Verify the checksum!
-    unimplemented!("implement the logic")
+    let mut decoded_bytes = bs58::decode(base58_string).into_vec().expect("Invalid base58 string");
+    decoded_bytes.truncate(decoded_bytes.len() - 4);
+    decoded_bytes
 }
 
 // Deserialize the extended pubkey bytes and return a ExKey object
