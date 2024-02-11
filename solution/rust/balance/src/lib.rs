@@ -1,11 +1,16 @@
 #![allow(unused)]
 
 use std::process::Command;
+
 use bs58;
+use hmac::Hmac;
+use secp256k1::{PublicKey, Secp256k1, SecretKey};
+
 // Provided by administrator
 pub const WALLET_NAME: &str = "wallet_152";
 pub const EXTENDED_PRIVATE_KEY: &str = "tprv8ZgxMBicQKsPdisufuN1WwxfQGPpBAm9DD11kyTANuq8LDBh6nGFj1kaddVP5U9if6LypPkdnUkuxLMUFkEyMNDSreXx12hxJC6WsboYbbs";
 
+//wpkh(tprv8ZgxMBicQKsPdisufuN1WwxfQGPpBAm9DD11kyTANuq8LDBh6nGFj1kaddVP5U9if6LypPkdnUkuxLMUFkEyMNDSreXx12hxJC6WsboYbbs/84h/1h/0h/0/*)#6jjugh90
 #[derive(Debug)]
 pub enum BalanceError {
     MissingCodeCantRun,
@@ -41,6 +46,7 @@ fn base58_decode(base58_string: &str) -> Vec<u8> {
     let mut decoded_bytes = bs58::decode(base58_string).into_vec().expect("Invalid base58 string");
     decoded_bytes.truncate(decoded_bytes.len() - 4);
     decoded_bytes
+    // BONUS points for verifying checksum
 }
 
 // Deserialize the extended pubkey bytes and return a ExKey object
@@ -52,7 +58,6 @@ fn base58_decode(base58_string: &str) -> Vec<u8> {
 // 32 bytes: the chain code
 // 33 bytes: the public key or private key data (serP(K) for public keys, 0x00 || ser256(k) for private keys)
 fn deserialize_key(bytes: &[u8]) -> ExKey {
-    // Check if the input bytes are at least 78 bytes long (the minimum required length for a BIP32 key)
     if bytes.len() < 78 {
         panic!("Invalid input: insufficient bytes for BIP32 key");
     }
@@ -79,16 +84,69 @@ fn deserialize_key(bytes: &[u8]) -> ExKey {
 }
 
 // Derive the secp256k1 compressed public key from a given private key
-// BONUS POINTS: Implement ECDSA yourself and multiply you key by the generator point!
+// BONUS POINTS: Implement ECDSA yourself and multiply your key by the generator point!
 fn derive_public_key_from_private(key: &[u8]) -> Vec<u8> {
-    unimplemented!("implement the logic")
+    let secp = Secp256k1::new();
+    let secret_key = SecretKey::from_slice(key).expect("Invalid private key");
+    let public_key = PublicKey::from_secret_key(&secp, &secret_key);
+    let compressed_public_key = public_key.serialize();
+
+    compressed_public_key.to_vec()
 }
 
 // Perform a BIP32 parent private key -> child private key derivation
 // Return a derived child Xpriv, given a child_number. Check the struct docs for APIs.
 // Key derivation steps: https://github.com/bitcoin/bips/blob/master/bip-0032.mediawiki#user-content-Private_parent_key_rarr_private_child_key
 fn derive_priv_child(key: ExKey, child_num: u32) -> ExKey {
-    unimplemented!("implement the logic")
+    let (kpar, cpar) = (&key.key, &key.chaincode);
+    let is_hardened = child_num >= 0x80000000;
+    let mut data = Vec::new();
+
+    type HmacSha512 = Hmac<HmacSha512>;
+    if is_hardened {
+        data.push(0x00);
+    }
+    data.extend_from_slice(&kpar);
+    data.extend_from_slice(&child_num.to_be_bytes());
+
+    let mut hmac = HmacSha512::new_from_slice(&cpar).unwrap();
+    hmac.update(&data);
+    let result = hmac.finalize().into_bytes();
+
+    let il = &result[0..32];
+    let ir = &result[32..64];
+
+    let mut ki_bytes = [0u8; 32];
+    ki_bytes.copy_from_slice(il);
+    let mut kpar_bytes = [0u8; 32];
+    kpar_bytes[1..].copy_from_slice(&kpar[1..]);
+
+    // Compute ki = IL + kpar (mod n)
+    let mut ki = [0u8; 32];
+    let mut carry = 0;
+    for i in (0..32).rev() {
+        let sum = il[i] + kpar_bytes[i] + carry;
+        ki[i] = sum % 256;
+        carry = sum / 256;
+    }
+
+    let curve_order = &secp256k1::constants::CURVE_ORDER;
+    if ki >= *curve_order {
+        panic!("Invalid child key: ki is greater than or equal to the curve order");
+    }
+
+    let mut child_key = ExKey {
+        version: key.version,
+        depth: [key.depth[0] + 1],
+        finger_print: key.finger_print,
+        child_number: child_num.to_be_bytes(),
+        chaincode: ir.try_into().unwrap(),
+        key: [0; 33],
+    };
+
+    child_key.key[1..].copy_from_slice(&ki);
+
+    child_key
 }
 
 // Given an extended private key and a BIP32 derivation path, compute the child private key found at the path
