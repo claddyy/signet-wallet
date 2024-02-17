@@ -53,13 +53,9 @@ execute RPCs with (for example):
 
 `bitcoin-cli -signet getblockcount`
 
-# Week 1 (keys and addresses)
+# keys and addresses
 
 See [Recover Balance](./recover_balance.md) coding challenge
-
-# Week 2 (transactions, scripts, and signatures)
-
-See [Send Multisig](./send_multisig.md) coding challenge
 
 # Admin Infrastructure
 
